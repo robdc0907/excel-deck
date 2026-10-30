@@ -9,11 +9,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let uploadedFileName = '';
   let currentSheet = '';
-  let currentHeaders = [];
+  let sheetData = [];
 
   const setStatus = (message, type = 'info') => {
     statusBox.textContent = message;
     statusBox.className = `status ${type}`;
+  };
+
+  const renderColumnControls = (headers) => {
+    columnList.innerHTML = '';
+    headers.forEach((header) => {
+      const row = document.createElement('div');
+      row.className = 'column-row';
+
+      const label = document.createElement('label');
+      label.textContent = header || 'Unnamed';
+
+      const select = document.createElement('select');
+      select.innerHTML = `
+        <option value="direct">Direct</option>
+        <option value="subtraction">Subtraction</option>
+        <option value="multiplication">Multiplication</option>
+        <option value="growth_percent">Growth %</option>
+        <option value="percentage_of_total">Percentage of total</option>
+        <option value="percent_change">Percent change</option>
+      `;
+
+      row.appendChild(label);
+      row.appendChild(select);
+      columnList.appendChild(row);
+    });
   };
 
   uploadForm.addEventListener('submit', async (event) => {
@@ -26,7 +51,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const formData = new FormData();
     formData.append('file', file);
-
     setStatus('Uploading file...', 'info');
 
     try {
@@ -41,18 +65,18 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       uploadedFileName = result.filename;
+      sheetData = result.sheets || [];
       sheetSelect.innerHTML = '';
 
-      result.sheets.forEach((sheet) => {
+      sheetData.forEach((sheet) => {
         const option = document.createElement('option');
         option.value = sheet.name;
         option.textContent = `${sheet.name} (${sheet.rowCount} rows)`;
         sheetSelect.appendChild(option);
       });
 
-      currentSheet = result.sheets[0].name;
-      currentHeaders = result.sheets[0].headers || [];
-      renderColumnControls(currentHeaders);
+      currentSheet = sheetData[0]?.name || '';
+      renderColumnControls(sheetData[0]?.headers || []);
       setStatus('File uploaded successfully. Choose columns and formulas.', 'success');
     } catch (error) {
       setStatus(error.message, 'error');
@@ -61,36 +85,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   sheetSelect.addEventListener('change', (event) => {
     currentSheet = event.target.value;
-    const selectedSheet = JSON.parse(localStorage.getItem('sheetData') || '[]').find((sheet) => sheet.name === currentSheet);
-    if (selectedSheet) {
-      currentHeaders = selectedSheet.headers || [];
-      renderColumnControls(currentHeaders);
-    }
+    const selectedSheet = sheetData.find((sheet) => sheet.name === currentSheet);
+    renderColumnControls(selectedSheet?.headers || []);
   });
-
-  const renderColumnControls = (headers) => {
-    columnList.innerHTML = '';
-    headers.forEach((header) => {
-      const row = document.createElement('div');
-      row.className = 'column-row';
-
-      const label = document.createElement('label');
-      label.textContent = header;
-
-      const select = document.createElement('select');
-      select.innerHTML = `
-        <option value="direct">Direct</option>
-        <option value="subtraction">Subtraction</option>
-        <option value="multiplication">Multiplication</option>
-        <option value="growth_percent">Growth %</option>
-        <option value="percentage_of_total">Percentage of total</option>
-      `;
-
-      row.appendChild(label);
-      row.appendChild(select);
-      columnList.appendChild(row);
-    });
-  };
 
   generateButton.addEventListener('click', async () => {
     const selectedColumns = [];
@@ -102,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    if (!uploadedFileName || selectedColumns.length === 0) {
+    if (!uploadedFileName || !currentSheet || selectedColumns.length === 0) {
       setStatus('Please upload a file and select at least one column.', 'error');
       return;
     }
@@ -126,11 +123,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = downloadUrl;
+      link.href = url;
       link.download = 'excel-deck-presentation.pptx';
       link.click();
+      URL.revokeObjectURL(url);
 
       setStatus('PowerPoint created successfully and downloaded.', 'success');
     } catch (error) {
